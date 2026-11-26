@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Online Shopping &amp; Order Management System</title>
+<style>
+:root{--navy:#1d2b4f;--gold:#e0a526;--bg:#f6f5f1;--card:#fff;--line:#dcd9cf;--ink:#1c1f2a;--mute:#6a6d78;--ok:#2d7a4f;--bad:#b3392f}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Segoe UI,sans-serif;line-height:1.45}
+header{background:var(--navy);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:10px}
+header h1{margin:0;font-size:1.05rem;flex:1}
+header .who{font-size:.8rem;opacity:.85;text-align:right}
+nav{display:flex;gap:6px;padding:10px 14px;overflow-x:auto;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+nav button{flex:none;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:8px;font:inherit;cursor:pointer}
+nav button.on{background:var(--navy);border-color:var(--navy);color:#fff}
+main{max-width:900px;margin:auto;padding:14px}
+h2{font-size:1.1rem;margin:18px 0 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px}
+.grid .card{margin:0}
+.mute{color:var(--mute);font-size:.85rem}
+.price{font-weight:700;color:var(--navy)}
+button.btn{background:var(--navy);color:#fff;border:0;border-radius:8px;padding:9px 14px;font:inherit;cursor:pointer}
+button.btn.alt{background:transparent;color:var(--navy);border:1px solid var(--navy)}
+button.btn.bad{background:var(--bad)}
+button.btn.big{width:100%;padding:16px;font-size:1.05rem;margin-bottom:10px}
+button.btn:disabled{opacity:.4;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--gold);outline-offset:1px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:var(--card);color:var(--ink)}
+label{font-size:.8rem;color:var(--mute);display:block;margin:8px 0 3px}
+.form{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;align-items:end}
+.row{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border:0}
+.qty{display:flex;align-items:center;gap:8px}
+.qty button{width:30px;height:30px;border-radius:6px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:1rem;cursor:pointer}
+.tag{display:inline-block;font-size:.75rem;padding:2px 9px;border-radius:99px;background:#eceae1;color:#555}
+.tag.ok{background:#dcefe3;color:var(--ok)}
+.tag.bad{background:#f6dcd9;color:var(--bad)}
+.total{font-size:1.1rem;font-weight:700;display:flex;justify-content:space-between;padding-top:8px}
+.actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.auth{max-width:380px;margin:30px auto}
+.auth h2{text-align:center;margin-top:0}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.stat b{display:block;font-size:1.3rem;color:var(--navy)}
+.steps{margin:6px 0}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{text-align:left;padding:7px 4px;border-bottom:1px solid var(--line)}
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:8px;font-size:.9rem;max-width:90%;z-index:5}
+@media (prefers-color-scheme:dark){
+:root{--bg:#12151f;--card:#1b1f2e;--line:#2d3347;--ink:#eceef5;--mute:#9aa0b3}
+.price,.stat b,button.btn.alt{color:var(--gold)}button.btn.alt{border-color:var(--gold)}
+.tag{background:#2a3047;color:#ccd}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Online Shopping &amp; Order Management</h1>
+  <div class="who" id="who" hidden></div>
+  <button class="btn alt" id="out" hidden onclick="logout()" style="color:#fff;border-color:#fff">Log out</button>
+</header>
+<nav id="nav" hidden></nav>
+<main id="app"></main>
+<div id="toast" hidden></div>
+
+<script>
+const KEY = 'shop_db_v2', SKEY = 'shop_session_v2';
+
+/* ---------- Data (matches the ERD) ---------- */
+const seed = () => ({
+  seq: {u: 3, p: 4, o: 1, i: 1, pay: 1},
+  users: [   // CUSTOMER table + admin accounts
+    {id: 1, name: 'Allen Ebondas', login: 'admin', pass: 'admin123', role: 'admin', address: ''},
+    {id: 2, name: 'Customer', login: 'customer', pass: 'customer123', role: 'customer', address: '123 Rizal St, Manila'}
+  ],
+  products: [
+    {id: 1, name: 'Mouse', desc: 'Wireless Bluetooth mouse', cat: 'Electronics', price: 400, stock: 50},
+    {id: 2, name: 'Monitor', desc: '24-inch LED monitor', cat: 'Electronics', price: 5500, stock: 15},
+    {id: 3, name: 'Notebook', desc: 'A5 ruled notebook', cat: 'School Supplies', price: 59.5, stock: 200}
+  ],
+  orders: [],    // OrderID, CustomerID, OrderDate, TotalAmount, PaymentStatus, OrderStatus
+  items: [],     // OrderItemID, OrderID, ProductID, Quantity, UnitPrice, Subtotal
+  payments: []   // PaymentID, OrderID, PaymentDate, PaymentMethod, AmountPaid, PaymentStatus
+});
+let db = null;
+try { db = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+db = db || seed();
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) {} };
+
+/* ---------- Helpers ---------- */
+const $ = s => document.querySelector(s);
+const money = n => '₱' + Number(n).toLocaleString('en-PH', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const byId = (list, id) => list.find(x => x.id === Number(id));
+const val = id => $('#' + id).value.trim();
+const sum = (arr, f) => arr.reduce((s, x) => s + f(x), 0);
+const STEPS = ['Pending', 'Shipped', 'Delivered'];
+const LABEL = {Pending: 'Order placed', Shipped: 'Shipped', Delivered: 'Delivered'};
+
+let me = null;
+try { me = byId(db.users, localStorage.getItem(SKEY)); } catch (e) {}
+let view = me ? 'app' : 'home', role = '', mode = 'login', cart = {}, tab = '', tt;
+if (me) tab = me.role === 'admin' ? 'inventory' : 'shop';
+
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.hidden = false;
+  clearTimeout(tt); tt = setTimeout(() => t.hidden = true, 2800);
+}
+const go = t => { tab = t; render(); window.scrollTo(0, 0); };
+
+/* ---------- Auth ---------- */
+function pick(r){ role = r; mode = 'login'; view = 'auth'; render(); }
+function setMode(m){ mode = m; render(); }
+function enter(u){
+  me = u; cart = {};
+  try { localStorage.setItem(SKEY, u.id); } catch (e) {}
+  tab = u.role === 'admin' ? 'inventory' : 'shop'; view = 'app'; render();
+}
+function login(){
+  const l = val('lu').toLowerCase(), p = $('#lp').value;
+  const u = db.users.find(x => x.login.toLowerCase() === l && x.pass === p && x.role === role);
+  if (!u) return toast('Wrong username or password.');
+  enter(u);
+}
+function signup(){
+  const name = val('sn'), l = val('su'), a = val('sa'), p = $('#sp').value;
+  if (!name || !l || !p) return toast('Fill in your name, email/number/username and password.');
+  if (p.length < 4) return toast('Password must be at least 4 characters.');
+  if (p !== $('#sp2').value) return toast('Passwords do not match.');
+  if (db.users.some(x => x.login.toLowerCase() === l.toLowerCase())) return toast('That username is already taken.');
+  const u = {id: db.seq.u++, name, login: l, pass: p, role: 'customer', address: a};
+  db.users.push(u); save(); toast('Account created. Welcome!'); enter(u);
+}
+function logout(){
+  me = null; cart = {}; view = 'home';
+  try { localStorage.removeItem(SKEY); } catch (e) {}
+  render();
+}
+
+/* ---------- Customer actions ---------- */
+function setCart(pid, d){
+  const p = byId(db.products, pid), q = (cart[pid] || 0) + d;
+  if (q > p.stock) return toast('Only ' + p.stock + ' in stock.');
+  if (q <= 0) delete cart[pid]; else cart[pid] = q;
+  render();
+}
+function placeOrder(){
+  const ids = Object.keys(cart);
+  if (!ids.length) return toast('Add at least one product first.');
+  const addr = val('addr'); if (!addr) return toast('Enter your delivery address.');
+  const method = val('met'), o = {id: db.seq.o++, customerId: me.id, date: new Date().toISOString(), total: 0, address: addr,
+    payStatus: method === 'Cash on delivery' ? 'Unpaid' : 'Paid', status: 'Pending'};
+  ids.forEach(pid => {
+    const p = byId(db.products, pid), q = cart[pid], sub = p.price * q;   // Subtotal = UnitPrice × Quantity
+    p.stock -= q; o.total += sub;                                          // TotalAmount = sum of subtotals
+    db.items.push({id: db.seq.i++, orderId: o.id, productId: p.id, name: p.name, qty: q, unitPrice: p.price, subtotal: sub});
+  });
+  db.payments.push({id: db.seq.pay++, orderId: o.id, date: o.date, method, amount: o.total, status: o.payStatus});
+  if (!me.address) me.address = addr;
+  db.orders.push(o); cart = {}; save(); tab = 'myorders'; render(); toast('Order #' + o.id + ' placed!');
+}
+
+/* ---------- Order status (admin ships, customer confirms received) ---------- */
+function advance(oid){
+  const o = byId(db.orders, oid), i = STEPS.indexOf(o.status);
+  if (i >= STEPS.length - 1) return;
+  o.status = STEPS[i + 1];
+  if (o.status === 'Delivered'){
+    o.payStatus = 'Paid';
+    db.payments.filter(p => p.orderId === o.id).forEach(p => p.status = 'Paid');
+  }
+  save(); render(); toast('Order #' + o.id + ': ' + LABEL[o.status]);
+}
+
+/* ---------- Admin actions ---------- */
+function addProduct(){
+  const name = val('pn'), price = parseFloat(val('pp')), stock = parseInt(val('ps') || '0', 10);
+  if (!name || !(price >= 0)) return toast('Enter a product name and a price.');
+  db.products.push({id: db.seq.p++, name, desc: val('pd'), cat: val('pc'), price, stock: stock || 0});
+  save(); render(); toast('Product added.');
+}
+function updateProduct(id){
+  const p = byId(db.products, id), price = parseFloat(val('pr' + id)), stock = parseInt(val('st' + id), 10);
+  if (!(price >= 0) || !(stock >= 0)) return toast('Enter a valid price and stock.');
+  p.price = price; p.stock = stock; save(); render(); toast(p.name + ' updated.');
+}
+function delProduct(id){
+  if (!confirm('Delete this product?')) return;
+  db.products = db.products.filter(p => p.id !== id); save(); render();
+}
+
+/* ---------- Shared pieces ---------- */
+const stepper = o => `<div class="steps">${STEPS.map((s, i) =>
+  `<span class="tag ${i <= STEPS.indexOf(o.status) ? 'ok' : ''}">${LABEL[s]}</span>`).join(' → ')}</div>`;
+
+function orderCard(o, admin){
+  const its = db.items.filter(i => i.orderId === o.id), c = byId(db.users, o.customerId);
+  let btn = '';
+  if (admin && o.status === 'Pending') btn = `<button class="btn" onclick="advance(${o.id})">Mark as shipped</button>`;
+  if (admin && o.status === 'Shipped') btn = `<button class="btn alt" onclick="advance(${o.id})">Mark as delivered</button>`;
+  if (!admin && o.status === 'Shipped') btn = `<button class="btn" onclick="advance(${o.id})">I received my order</button>`;
+  return `<div class="card">
+    <div class="row"><b>Order #${o.id}${admin ? ' · ' + esc(c ? c.name : 'Unknown') : ''}</b>
+      <span class="tag ${o.payStatus === 'Paid' ? 'ok' : 'bad'}">${o.payStatus}</span></div>
+    <p class="mute">${new Date(o.date).toLocaleString()}<br>Deliver to: ${esc(o.address)}</p>
+    ${stepper(o)}
+    ${its.map(i => `<div class="row"><span>${esc(i.name)} × ${i.qty}</span><span>${money(i.subtotal)}</span></div>`).join('')}
+    <div class="total"><span>Total</span><span>${money(o.total)}</span></div>
+    <p class="mute">Payment: ${esc((db.payments.find(p => p.orderId === o.id) || {}).method || '-')}</p>
+    ${btn ? `<div class="actions">${btn}</div>` : ''}</div>`;
+}
+
+/* ---------- Views ---------- */
+function home(){
+  return `<div class="auth"><h2>Welcome! Log in as:</h2>
+    <button class="btn big" onclick="pick('customer')">🛍️ Customer</button>
+    <button class="btn big alt" onclick="pick('admin')">🛠️ Admin</button>
+    <p class="mute" style="text-align:center">Demo accounts: admin / admin123 · customer / customer123</p></div>`;
+}
+
+function auth(){
+  const cust = role === 'customer';
+  if (mode === 'signup') return `<div class="auth card"><h2>Create customer account</h2>
+    <label for="sn">Full name</label><input id="sn" autocomplete="name">
+    <label for="su">Email / phone number / username</label><input id="su" autocomplete="username">
+    <label for="sa">Delivery address</label><input id="sa" autocomplete="street-address">
+    <label for="sp">Password</label><input id="sp" type="password" autocomplete="new-password">
+    <label for="sp2">Confirm password</label><input id="sp2" type="password" autocomplete="new-password">
+    <div class="actions"><button class="btn" onclick="signup()">Sign up</button>
+    <button class="btn alt" onclick="setMode('login')">Back to log in</button></div></div>`;
+  return `<div class="auth card"><h2>${cust ? 'Customer' : 'Admin'} log in</h2>
+    <label for="lu">Email / phone number / username</label><input id="lu" autocomplete="username">
+    <label for="lp">Password</label><input id="lp" type="password" autocomplete="current-password">
+    <div class="actions"><button class="btn" onclick="login()">Log in</button>
+    ${cust ? `<button class="btn alt" onclick="setMode('signup')">Sign up</button>` : ''}
+    <button class="btn alt" onclick="view='home';render()">Back</button></div></div>`;
+}
+
+/* Customer panel */
+function shop(){
+  const ids = Object.keys(cart), total = sum(ids, id => byId(db.products, id).price * cart[id]);
+  return `<h2>Products &amp; prices</h2>
+  <div class="grid">${db.products.map(p => `
+    <div class="card"><b>${esc(p.name)}</b>
+      <span class="mute">${esc(p.cat)} · ${p.stock} in stock</span>
+      <p class="mute">${esc(p.desc)}</p>
+      <div class="row"><span class="price">${money(p.price)}</span>
+      <button class="btn" ${p.stock - (cart[p.id] || 0) < 1 ? 'disabled' : ''} onclick="setCart(${p.id},1)">Add to cart</button></div>
+    </div>`).join('') || '<p class="mute">No products available.</p>'}</div>
+  <h2>Your cart</h2>
+  <div class="card">
+    ${ids.length ? ids.map(id => { const p = byId(db.products, id); return `
+      <div class="row"><span>${esc(p.name)}<br><span class="mute">${money(p.price)} each</span></span>
+      <span class="qty"><button aria-label="Remove one" onclick="setCart(${p.id},-1)">−</button>${cart[id]}<button aria-label="Add one" onclick="setCart(${p.id},1)">+</button></span>
+      <b>${money(p.price * cart[id])}</b></div>`; }).join('')
+      : '<p class="mute">Your cart is empty.</p>'}
+    <div class="total"><span>Total</span><span>${money(total)}</span></div>
+    <label for="addr">Delivery address</label><input id="addr" value="${esc(me.address)}">
+    <label for="met">Payment method</label>
+    <select id="met"><option>Cash on delivery</option><option>GCash</option><option>Credit card</option></select>
+    <div class="actions"><button class="btn" onclick="placeOrder()">Place order</button>
+    <button class="btn alt" onclick="go('myorders')">Summary of orders</button></div>
+  </div>`;
+}
+function myorders(){
+  const mine = db.orders.filter(o => o.customerId === me.id).reverse();
+  return `<h2>Summary of my orders</h2>` + (mine.length ? mine.map(o => orderCard(o, false)).join('')
+    : '<p class="mute">You have no orders yet. Go to the Shop to place one.</p>');
+}
+
+/* Admin panel */
+function inventory(){
+  return `<h2>Inventory</h2>
+  <div class="card"><table><tr><th>Product</th><th>Price (₱)</th><th>Stock</th><th></th></tr>
+  ${db.products.map(p => `<tr><td>${esc(p.name)}</td>
+    <td><input id="pr${p.id}" type="number" min="0" step="0.01" value="${p.price}" aria-label="Price of ${esc(p.name)}"></td>
+    <td><input id="st${p.id}" type="number" min="0" value="${p.stock}" aria-label="Stock of ${esc(p.name)}"></td>
+    <td><div class="actions" style="margin:0"><button class="btn" onclick="updateProduct(${p.id})">Save</button>
+    <button class="btn bad" onclick="delProduct(${p.id})" aria-label="Delete ${esc(p.name)}">✕</button></div></td></tr>`).join('')}
+  </table>${db.products.length ? '' : '<p class="mute">No products yet.</p>'}</div>
+  <h2>Add a product</h2>
+  <div class="card form">
+    <div><label for="pn">Name</label><input id="pn"></div>
+    <div><label for="pc">Category</label><input id="pc"></div>
+    <div><label for="pp">Price</label><input id="pp" type="number" min="0" step="0.01"></div>
+    <div><label for="ps">Stock</label><input id="ps" type="number" min="0"></div>
+    <div><label for="pd">Description</label><input id="pd"></div>
+    <button class="btn" onclick="addProduct()">Add product</button>
+  </div>`;
+}
+function adminOrders(){
+  const all = [...db.orders].reverse();
+  return `<h2>Orders (${all.length})</h2>` + (all.length ? all.map(o => orderCard(o, true)).join('') : '<p class="mute">No orders yet.</p>');
+}
+function sales(){
+  const done = db.orders.filter(o => o.status === 'Delivered'), open = db.orders.filter(o => o.status !== 'Delivered');
+  const ids = done.map(o => o.id), rows = {};
+  db.items.filter(i => ids.includes(i.orderId)).forEach(i => {
+    rows[i.name] = rows[i.name] || {q: 0, r: 0}; rows[i.name].q += i.qty; rows[i.name].r += i.subtotal; });
+  return `<h2>Sales</h2>
+  <div class="stats">
+    <div class="stat"><span class="mute">Total sales (delivered)</span><b>${money(sum(done, o => o.total))}</b></div>
+    <div class="stat"><span class="mute">Pending revenue</span><b>${money(sum(open, o => o.total))}</b></div>
+    <div class="stat"><span class="mute">Total orders</span><b>${db.orders.length}</b></div>
+    <div class="stat"><span class="mute">Items sold</span><b>${sum(Object.values(rows), r => r.q)}</b></div>
+  </div>
+  <div class="card"><b>Sales per product</b>
+  <table><tr><th>Product</th><th>Units</th><th>Revenue</th></tr>
+  ${Object.keys(rows).map(n => `<tr><td>${esc(n)}</td><td>${rows[n].q}</td><td>${money(rows[n].r)}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="mute">No delivered orders yet.</td></tr>'}</table></div>`;
+}
+
+/* ---------- Render ---------- */
+function render(){
+  const loggedIn = view === 'app' && me;
+  $('#who').hidden = $('#out').hidden = $('#nav').hidden = !loggedIn;
+  if (!loggedIn){ $('#app').innerHTML = view === 'auth' ? auth() : home(); return; }
+  $('#who').innerHTML = esc(me.name) + '<br>' + (me.role === 'admin' ? 'Admin' : 'Customer');
+  const tabs = me.role === 'admin' ? [['inventory','Inventory'],['orders','Orders'],['sales','Sales']]
+                                   : [['shop','Shop'],['myorders','My orders']];
+  $('#nav').innerHTML = tabs.map(([k, l]) => `<button class="${tab === k ? 'on' : ''}" onclick="go('${k}')">${l}</button>`).join('');
+  const pages = {shop, myorders, inventory, orders: adminOrders, sales};
+  $('#app').innerHTML = (pages[tab] || pages[tabs[0][0]])();
+}
+render();
+</script>
+</body>
+</html>
